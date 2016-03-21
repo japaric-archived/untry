@@ -1,28 +1,60 @@
 # `untry`
 
-> Blindly convert `try!()` into `?`s
+> Convert `try!`s into `?`s
 
 ## Usage
 
+Pass the Rust files you want to modify as arguments. The files will be modified in place:
+
 ```
-$ untry $FILE1 $FILE2 ...
-$FILE1 ... OK
-$FILE2 ... OK
-(...)
+$ cat sinbad.rs
+use std::fs::File;
+use std::io::{self, Read, Write};
+
+fn main() {
+    run().unwrap();
+}
+
+fn run() -> io::Result<()> {
+    let wishes = &mut String::new();
+    try!(try!(File::open("sesame")).read_to_string(wishes));
+    try!(try!(File::create("genie")).write_all(wishes.as_bytes()));
+    Ok(())
+}
+
+$ untry sinbad.rs
+Processing 1 file
+sinbad.rs: OK
+
+$ cat sinbad.rs
+use std::fs::File;
+use std::io::{self, Read, Write};
+
+fn main() {
+    run().unwrap();
+}
+
+fn run() -> io::Result<()> {
+    let wishes = &mut String::new();
+    File::open("sesame")?.read_to_string(wishes)?;
+    File::create("genie")?.write_all(wishes.as_bytes())?;
+    Ok(())
+}
+
 ```
 
-## Caveats
+For larger projects you probably want to use this in conjunction with `find`:
 
-This tool is very simple so it doesn't cover all cases, in particular:
+```
+$ find -name '*.rs' -type f | xargs untry
+```
 
-- It doesn't convert `try! {}`s (with braces)
-- or multi-line `try!()`s
-- it wrongly converts other macros like `fs_try!()`
-- and has problem when parentheses appear in string literals: `try!(word(&mut self.s, ")"))` gets
-    converted to `word(&mut self.s, ")"?);` instead of `word(&mut self.s, ")")?`
+## Known issues
 
-However, it does handle nested `try!()`s and appears to correctly convert like 70%+ of the usages in
-the rust-lang/cargo repository.
+- This tool won't replace the `try!`s in doc comments or the ones inside macros. You'll have to
+    convert those manually.
+- This tool will also replace user-defined `try!`s with `?`s. You'll have to manually undo those
+    conversions.
 
 ## License
 

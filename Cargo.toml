@@ -4,3 +4,4 @@ version = "0.1.0"
 authors = ["Jorge Aparicio <japaricious@gmail.com>"]
 
 [dependencies]
+syntex_syntax = "0.30.0"
