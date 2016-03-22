@@ -195,7 +195,7 @@ impl<'a> TryVisitor<'a> {
                     start = Some(lo + offset + i);
                     break;
                 } else {
-                    panic!("unexpected error while parsing: {}", &source[lo..hi])
+                    return Err(Error::Bug(source[lo..hi].to_owned()));
                 }
             }
 
