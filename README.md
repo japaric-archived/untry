@@ -55,6 +55,59 @@ $ find -name '*.rs' -type f | xargs untry
     convert those manually.
 - This tool will also replace user-defined `try!`s with `?`s. You'll have to manually undo those
     conversions.
+- Converting multi-line `try!`s like the one shown may break alignment. `untry` doesn't attempt to
+    be a formatting tool so it just informs the user about the issue by raising a warning.
+
+```
+// From
+            try!(collect_tests_from_dir(config,
+                                        base,
+                                        &file_path,
+                                        &relative_file_path,
+                                        tests));
+
+// To
+            collect_tests_from_dir(config,
+                                        base,
+                                        &file_path,
+                                        &relative_file_path,
+                                        tests)?;
+```
+
+But you get warnings like these:
+
+```
+./src/librustc/middle/check_match.rs: OK
+./src/librustc/middle/const_eval.rs: 2 warnings
+./src/librustc/middle/const_eval.rs:829:28 warning: multiline try!
+./src/librustc/middle/const_eval.rs:875:31 warning: multiline try!
+./src/librustc/middle/dataflow.rs: 1 warnings
+./src/librustc/middle/dataflow.rs:155:12 warning: multiline try!
+./src/librustc/middle/def_id.rs: 2 warnings
+./src/librustc/middle/def_id.rs:58:8 warning: multiline try!
+./src/librustc/middle/def_id.rs:67:12 warning: multiline try!
+./src/librustc/middle/expr_use_visitor.rs: OK
+```
+
+The spans get printed to stderr so the user can easily call `rustfmt` on the affected files:
+
+```
+$ find -name '*.rs' -type f | xargs untry 2>spans
+./src/librustc/middle/check_match.rs: OK
+./src/librustc/middle/const_eval.rs: 2 warnings
+./src/librustc/middle/dataflow.rs: 1 warnings
+./src/librustc/middle/def_id.rs: 2 warnings
+./src/librustc/middle/expr_use_visitor.rs: OK
+
+# possibly affected files
+$ cat spans | cut -d':' -f1 | sort -u
+./src/librustc/middle/const_eval.rs
+./src/librustc/middle/dataflow.rs
+./src/librustc/middle/def_id.rs
+
+# reformat them
+$ cat spans | cut -d':' -f1 | sort -u | xargs rustfmt
+```
 
 ## License
 

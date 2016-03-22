@@ -8,7 +8,7 @@ use std::result;
 use std::{env, fmt};
 
 use syntax::ast;
-use syntax::codemap::{CodeMap, Span};
+use syntax::codemap::{CodeMap, Loc, Span};
 use syntax::errors::emitter::ColorConfig;
 use syntax::errors::{DiagnosticBuilder, Handler};
 use syntax::parse::{self, token, ParseSess};
@@ -22,13 +22,26 @@ fn main() {
         return;
     }
 
+    let stderr = io::stderr();
+    let stderr = &mut stderr.lock();
     println!("Processing {} file{}", n, if n != 1 { "s" } else { "" });
     for file in files {
         let file_ = file.to_string_lossy();
 
         match untry(&file) {
             Err(e) => println!("{}: {}", file_, e),
-            Ok(_) => println!("{}: OK", file_),
+            Ok(warnings) => {
+                if warnings.len() == 0 {
+                    println!("{}: OK", file_);
+                } else {
+                    println!("{}: {} warnings", file_, warnings.len());
+
+                    for warning in warnings {
+                        writeln!(stderr, "{}:{}:{} warning: multi-line try!", warning.file.name,
+                                 warning.line, warning.col.0).ok();
+                    }
+                }
+            }
         }
     }
 }
@@ -66,16 +79,17 @@ type Result<T> = result::Result<T, Error>;
 /// Replaces almost all(*) the `try!`s in `file` with `?`s
 ///
 /// (*) This function won't replace the `try!`s that are in doc comments or inside other macros.
-fn untry<P>(file: P) -> Result<()>
+fn untry<P>(file: P) -> Result<Warnings>
     where P: AsRef<Path>
 {
     untry_(file.as_ref())
 }
 
-fn untry_(path: &Path) -> Result<()> {
+fn untry_(path: &Path) -> Result<Warnings> {
     let name = path.display().to_string();
     let mut source = String::new();
     try!(try!(File::open(path)).read_to_string(&mut source));
+    let mut warnings = Warnings::default();
 
     let mut source_was_modified = false;
     loop {
@@ -108,7 +122,15 @@ fn untry_(path: &Path) -> Result<()> {
 
         // NOTE Our parser-based approach doesn't handle nested `try!`s; it only peels off the outer
         // `try!`s. To handle nested `try!`s, we simply reparse the rewritten source.
-        source = try!(visitor.rewrite(&source));
+        let (rewritten_source, new_warnings) = try!(visitor.rewrite(&source));
+        source = rewritten_source;
+
+        // We only care about the warnings from the first rewrite. Subsequent rewrites will yield
+        // warnings that (a) are duplicates and (b) have the wrong span
+        if !source_was_modified {
+            warnings = new_warnings;
+        }
+
         source_was_modified = true;
     }
 
@@ -117,8 +139,12 @@ fn untry_(path: &Path) -> Result<()> {
                  .write_all(source.as_bytes()));
     }
 
-    Ok(())
+    Ok(warnings)
 }
+
+/// We mark `try!`s that span multiple lines as warnings, because the user may want to modify the
+/// transformed source to e.g. re-adjust the alignment of function arguments.
+type Warnings = Vec<Loc>;
 
 /// Stores the span of all the `try!` macros
 struct TryVisitor<'a> {
@@ -149,7 +175,7 @@ impl<'a> TryVisitor<'a> {
         }
     }
 
-    fn rewrite(&mut self, source: &str) -> Result<String> {
+    fn rewrite(&mut self, source: &str) -> Result<(String, Warnings)> {
         fn is_whitespace(c: char) -> bool {
             match c {
                 ' ' | '\n' | '\t' => true,
@@ -162,6 +188,7 @@ impl<'a> TryVisitor<'a> {
         self.spans.sort_by(|a, b| a.lo.cmp(&b.lo));
 
         let mut output = String::with_capacity(source.len());
+        let mut warnings = Warnings::new();
         let mut last = 0;
 
         // Go from:
@@ -180,6 +207,10 @@ impl<'a> TryVisitor<'a> {
             let lo = span.lo.0 as usize;
             let hi = span.hi.0 as usize;
             let (mut start, mut end) = (None, hi - 1);
+
+            if source[lo..hi].contains('\n') {
+                warnings.push(self.codemap.lookup_char_pos(span.lo));
+            }
 
             output.push_str(&source[last..lo]);
             last = hi;
@@ -219,6 +250,6 @@ impl<'a> TryVisitor<'a> {
 
         output.push_str(&source[last..]);
 
-        Ok(output)
+        Ok((output, warnings))
     }
 }
