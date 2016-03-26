@@ -49,6 +49,12 @@ For larger projects you probably want to use this in conjunction with `find`:
 $ find -name '*.rs' -type f | xargs untry
 ```
 
+## Notable examples
+
+Automatic conversion of the [rust-lang/rust] repository.
+
+[rust-lang/rust]: https://github.com/rust-lang/rust/pull/32390
+
 ## Known issues
 
 - This tool won't replace the `try!`s in doc comments or the ones inside macros. You'll have to
