@@ -88,7 +88,7 @@ fn untry<P>(file: P) -> Result<Warnings>
 fn untry_(path: &Path) -> Result<Warnings> {
     let name = path.display().to_string();
     let mut source = String::new();
-    try!(try!(File::open(path)).read_to_string(&mut source));
+    File::open(path)?.read_to_string(&mut source)?;
     let mut warnings = Warnings::default();
 
     let mut source_was_modified = false;
@@ -108,10 +108,10 @@ fn untry_(path: &Path) -> Result<Warnings> {
 
         let parse_session = ParseSess::with_span_handler(tty_handler, codemap.clone());
 
-        let krate = try!(parse::parse_crate_from_source_str(name.clone(),
+        let krate = parse::parse_crate_from_source_str(name.clone(),
                                                             source.clone(),
                                                             vec![],
-                                                            &parse_session));
+                                                            &parse_session)?;
 
         let visitor = &mut TryVisitor::new(&name, &codemap);
         visit::walk_mod(visitor, &krate.module);
@@ -122,7 +122,7 @@ fn untry_(path: &Path) -> Result<Warnings> {
 
         // NOTE Our parser-based approach doesn't handle nested `try!`s; it only peels off the outer
         // `try!`s. To handle nested `try!`s, we simply reparse the rewritten source.
-        let (rewritten_source, new_warnings) = try!(visitor.rewrite(&source));
+        let (rewritten_source, new_warnings) = visitor.rewrite(&source)?;
         source = rewritten_source;
 
         // We only care about the warnings from the first rewrite. Subsequent rewrites will yield
@@ -135,8 +135,8 @@ fn untry_(path: &Path) -> Result<Warnings> {
     }
 
     if source_was_modified {
-        try!(try!(OpenOptions::new().write(true).truncate(true).open(path))
-                 .write_all(source.as_bytes()));
+        OpenOptions::new().write(true).truncate(true).open(path)?
+                 .write_all(source.as_bytes())?;
     }
 
     Ok(warnings)
