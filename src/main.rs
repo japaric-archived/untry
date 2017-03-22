@@ -1,4 +1,5 @@
 extern crate syntex_syntax as syntax;
+extern crate syntex_errors;
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -9,9 +10,10 @@ use std::{env, fmt};
 
 use syntax::ast;
 use syntax::codemap::{CodeMap, Loc, Span};
-use syntax::errors::emitter::ColorConfig;
-use syntax::errors::{DiagnosticBuilder, Handler};
-use syntax::parse::{self, token, ParseSess};
+use syntex_errors::emitter::ColorConfig;
+use syntex_errors::{DiagnosticBuilder, Handler};
+use syntax::parse::{self, ParseSess};
+use syntax::ast::Ident;
 use syntax::visit::{self, Visitor};
 
 fn main() {
@@ -37,8 +39,12 @@ fn main() {
                     println!("{}: {} warnings", file_, warnings.len());
 
                     for warning in warnings {
-                        writeln!(stderr, "{}:{}:{} warning: multi-line try!", warning.file.name,
-                                 warning.line, warning.col.0).ok();
+                        writeln!(stderr,
+                                 "{}:{}:{} warning: multi-line try!",
+                                 warning.file.name,
+                                 warning.line,
+                                 warning.col.0)
+                                .ok();
                     }
                 }
             }
@@ -100,18 +106,13 @@ fn untry_(path: &Path) -> Result<Warnings> {
 
         let codemap = Rc::new(CodeMap::new());
 
-        let tty_handler = Handler::with_tty_emitter(ColorConfig::Auto,
-                                                    None,
-                                                    true,
-                                                    false,
-                                                    codemap.clone());
+        let tty_handler =
+            Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(codemap.clone()));
 
         let parse_session = ParseSess::with_span_handler(tty_handler, codemap.clone());
 
-        let krate = parse::parse_crate_from_source_str(name.clone(),
-                                                            source.clone(),
-                                                            vec![],
-                                                            &parse_session)?;
+        let krate =
+            parse::parse_crate_from_source_str(name.clone(), source.clone(), &parse_session)?;
 
         let visitor = &mut TryVisitor::new(&name, &codemap);
         visit::walk_mod(visitor, &krate.module);
@@ -135,8 +136,10 @@ fn untry_(path: &Path) -> Result<Warnings> {
     }
 
     if source_was_modified {
-        OpenOptions::new().write(true).truncate(true).open(path)?
-                 .write_all(source.as_bytes())?;
+        OpenOptions::new().write(true)
+            .truncate(true)
+            .open(path)?
+            .write_all(source.as_bytes())?;
     }
 
     Ok(warnings)
@@ -158,7 +161,7 @@ impl<'s, 'v> Visitor<'v> for TryVisitor<'s> {
         let segments = &mac.node.path.segments;
 
         if segments.len() == 1 &&
-            segments[0].identifier == token::str_to_ident("try") &&
+            segments[0].identifier == Ident::from_str("try") &&
             // don't include spans that were found in child modules
             self.codemap.span_to_filename(mac.span) == self.name {
             self.spans.push(mac.span);
