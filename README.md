@@ -1,3 +1,18 @@
+# Status
+
+This tool has been **DEPRECATED** in favor of [rustfmt]. To transform `try!`s
+into `?`s using rustfmt, add the following setting to your rustfmt.toml:
+
+``` toml
+use_try_shorthand = true
+```
+
+[rustfmt]: https://github.com/rust-lang-nursery/rustfmt
+
+-- @japaric, 2017-04-01
+
+---
+
 # `untry`
 
 > Convert `try!`s into `?`s
